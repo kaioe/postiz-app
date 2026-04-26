@@ -1,0 +1,27 @@
+name: Deploy to Cloudways
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Cloudways Token
+        id: get_token
+        run: |
+          TOKEN=$(curl -s -X POST "https://api.cloudways.com/api/v2/oauth/access_token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "email=${{ secrets.CLOUDWAYS_EMAIL }}&api_key=${{ secrets.CLOUDWAYS_API_KEY }}&grant_type=password" | jq -r '.access_token')
+          echo "CW_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+      - name: Trigger Git Pull on Cloudways
+        run: |
+          curl -s -X POST "https://api.cloudways.com/api/v2/git/pull" \
+            -H "Authorization: Bearer ${{ env.CW_TOKEN }}" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "server_id=58039&app_id=6375832&branch_name=main"
