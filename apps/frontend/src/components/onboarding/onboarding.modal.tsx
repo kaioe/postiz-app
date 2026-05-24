@@ -4,20 +4,32 @@ import React, { FC, useCallback, useMemo, useState } from 'react';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import { orderBy } from 'lodash';
-import clsx from 'clsx';
 import SafeImage from '@gitroom/react/helpers/safe.image';
 import { AddProviderComponent } from '@gitroom/frontend/components/launches/add.provider.component';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { Timeline, TimelineStep } from '@gitroom/frontend/components/ui/timeline.component';
 
 interface OnboardingModalProps {
   onClose: () => void;
 }
 
 export const OnboardingModal: FC<OnboardingModalProps> = ({ onClose }) => {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState('connect-channels');
   const modals = useModals();
   const t = useT();
+
+  const timelineSteps: TimelineStep[] = useMemo(
+    () => [
+      { key: 'connect-channels', label: t('connect_channels', 'Connect Channels') },
+      { key: 'watch-tutorial', label: t('watch_tutorial', 'Watch Tutorial') },
+    ],
+    [t]
+  );
+
+  const handleTimelineClick = useCallback((key: string) => {
+    setStep(key);
+  }, []);
 
   return (
     <div className="w-full min-h-full flex-1 p-[40px] flex relative">
@@ -47,60 +59,22 @@ export const OnboardingModal: FC<OnboardingModalProps> = ({ onClose }) => {
         </button>
         <div className="flex-1 flex p-[40px]">
           <div className="flex flex-col gap-[24px] flex-1">
-            {/* Step indicators */}
-            <div className="flex items-center justify-center gap-[16px]">
-              <div className="flex items-center gap-[8px]">
-                <div
-                  className={clsx(
-                    'w-[32px] h-[32px] rounded-full flex items-center justify-center text-[14px] font-semibold transition-colors',
-                    step === 1
-                      ? 'bg-boxFocused text-textItemFocused'
-                      : 'bg-newTableHeader'
-                  )}
-                >
-                  1
-                </div>
-                <span
-                  className={clsx(
-                    'text-[14px]',
-                    step === 1 ? 'font-medium' : 'text-textColor'
-                  )}
-                >
-                  {t('connect_channels', 'Connect Channels')}
-                </span>
-              </div>
-              <div className="w-[40px] h-[2px] bg-boxFocused" />
-              <div className="flex items-center gap-[8px]">
-                <div
-                  className={clsx(
-                    'w-[32px] h-[32px] rounded-full flex items-center justify-center text-[14px] font-semibold transition-colors',
-                    step === 2
-                      ? 'bg-boxFocused text-textItemFocused'
-                      : 'bg-newTableHeader'
-                  )}
-                >
-                  2
-                </div>
-                <span
-                  className={clsx(
-                    'text-[14px]',
-                    step === 2 ? 'font-medium' : 'text-textColor'
-                  )}
-                >
-                  {t('watch_tutorial', 'Watch Tutorial')}
-                </span>
-              </div>
-            </div>
+            {/* Timeline */}
+            <Timeline
+              steps={timelineSteps}
+              activeKey={step}
+              onStepClick={handleTimelineClick}
+            />
 
             {/* Step content */}
-            {step === 1 && (
+            {step === 'connect-channels' && (
               <OnboardingStep1
-                onNext={() => setStep(2)}
-                onSkip={() => setStep(2)}
+                onNext={() => setStep('watch-tutorial')}
+                onSkip={() => setStep('watch-tutorial')}
               />
             )}
-            {step === 2 && (
-              <OnboardingStep2 onBack={() => setStep(1)} onFinish={onClose} />
+            {step === 'watch-tutorial' && (
+              <OnboardingStep2 onBack={() => setStep('connect-channels')} onFinish={onClose} />
             )}
           </div>
         </div>
