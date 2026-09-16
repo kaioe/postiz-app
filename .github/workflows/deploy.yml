@@ -1,8 +1,21 @@
 name: Deploy to Cloudways
 
+# INERT / NEEDS REWORK (checked 2026-09-17).
+#
+# This workflow does NOT deploy anything. It was written in April 2026 for a
+# Cloudways app (server 58039, app 6375832) that no longer exists — the Cloudways
+# account on 139.59.241.78 has 19 applications and none of them is Postiz. The
+# only Postiz instance is the Docker stack on the Windows PC.
+#
+# It also fails silently: the API returns {"message":"Unauthorized"} and `curl -s`
+# exits 0, so every run reported a green tick while doing nothing.
+#
+# Trigger is now `workflow_dispatch` so a push to main cannot kick off a
+# meaningless run. Rewrite the target ids and re-enable the push trigger only
+# once a real Cloudways app exists again.
+
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -14,14 +27,18 @@ jobs:
       - name: Get Cloudways Token
         id: get_token
         run: |
-          TOKEN=$(curl -s -X POST "https://api.cloudways.com/api/v2/oauth/access_token" \
+          TOKEN=$(curl -sS --fail-with-body -X POST "https://api.cloudways.com/api/v2/oauth/access_token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "email=${{ secrets.CLOUDWAYS_EMAIL }}&api_key=${{ secrets.CLOUDWAYS_API_KEY }}&grant_type=password" | jq -r '.access_token')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "::error::Cloudways auth failed - check CLOUDWAYS_EMAIL / CLOUDWAYS_API_KEY"
+            exit 1
+          fi
           echo "CW_TOKEN=$TOKEN" >> $GITHUB_ENV
 
       - name: Trigger Git Pull on Cloudways
         run: |
-          curl -s -X POST "https://api.cloudways.com/api/v2/git/pull" \
+          curl -sS --fail-with-body -X POST "https://api.cloudways.com/api/v2/git/pull" \
             -H "Authorization: Bearer ${{ env.CW_TOKEN }}" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "server_id=58039&app_id=6375832&branch_name=main"

@@ -35,15 +35,19 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - name: Setup pnpm cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ${{ env.STORE_PATH }}
-            ${{ github.workspace }}/.next/cache
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-
+      # Disabled: hashFiles() over the whole workspace times out at 120s in this
+      # repo, which fails the job with "The template is not valid". Upstream has
+      # the same step commented out for the same reason. The job builds fine
+      # without the pnpm store cache; re-enable only with a narrower glob.
+      #      - name: Setup pnpm cache
+      #        uses: actions/cache@v6
+      #        with:
+      #          path: |
+      #            ${{ env.STORE_PATH }}
+      #            ${{ github.workspace }}/.next/cache
+      #          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+      #          restore-keys: |
+      #            ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-
 
       - name: Install dependencies
         run: pnpm install
