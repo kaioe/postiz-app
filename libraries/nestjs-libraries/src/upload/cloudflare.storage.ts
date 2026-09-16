@@ -1,4 +1,10 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import 'multer';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import mime from 'mime-types';
@@ -6,8 +12,11 @@ import mime from 'mime-types';
 import { getExtension } from 'mime';
 import { IUploadProvider } from './upload.interface';
 import axios from 'axios';
+import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { ssrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/ssrf.safe.dispatcher';
+import { parseDataUrl } from '@gitroom/nestjs-libraries/upload/data.url';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { fromBuffer } = require('file-type');
+const { fileTypeFromBuffer } = require('file-type');
 
 const ALLOWED_MIME_TYPES = new Set<string>([
   'image/jpeg',
@@ -75,9 +84,22 @@ class CloudflareStorage implements IUploadProvider {
   }
 
   async uploadSimple(path: string) {
-    const loadImage = await fetch(path);
-    const body = Buffer.from(await loadImage.arrayBuffer());
-    const detected = await fromBuffer(body);
+    const dataUrl = path.startsWith('data:') ? parseDataUrl(path) : null;
+
+    let body: Buffer;
+    if (dataUrl) {
+      body = dataUrl.buffer;
+    } else {
+      if (!(await isSafePublicHttpsUrl(path))) {
+        throw new Error('Unsafe URL');
+      }
+      const loadImage = await fetch(path, {
+        // @ts-ignore — undici option, not in lib.dom fetch types
+        dispatcher: ssrfSafeDispatcher,
+      });
+      body = Buffer.from(await loadImage.arrayBuffer());
+    }
+    const detected = await fileTypeFromBuffer(body);
     if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
       throw new Error('Unsupported file type.');
     }
@@ -101,7 +123,7 @@ class CloudflareStorage implements IUploadProvider {
 
   async uploadFile(file: Express.Multer.File): Promise<any> {
     try {
-      const detected = await fromBuffer(file.buffer);
+      const detected = await fileTypeFromBuffer(file.buffer);
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
         throw new Error('Unsupported file type.');
       }
@@ -138,14 +160,39 @@ class CloudflareStorage implements IUploadProvider {
     }
   }
 
-  // Implement the removeFile method from IUploadProvider
+  async signDownloadUrl(fileName: string) {
+    return getSignedUrl(
+      this._client,
+      new GetObjectCommand({ Bucket: this._bucketName, Key: fileName }),
+      { expiresIn: 3 * 3600 }
+    );
+  }
+
+  async signUploadUrl(fileName: string, contentType: string) {
+    return getSignedUrl(
+      this._client,
+      new PutObjectCommand({
+        Bucket: this._bucketName,
+        Key: fileName,
+        ContentType: contentType,
+      }),
+      { expiresIn: 3 * 3600 }
+    );
+  }
+
+  // Accepts either the public URL or the bare key
   async removeFile(filePath: string): Promise<void> {
-    // const fileName = filePath.split('/').pop(); // Extract the filename from the path
-    // const command = new DeleteObjectCommand({
-    //   Bucket: this._bucketName,
-    //   Key: fileName,
-    // });
-    // await this._client.send(command);
+    const fileName = filePath.split('/').pop();
+    if (!fileName) {
+      return;
+    }
+
+    await this._client.send(
+      new DeleteObjectCommand({
+        Bucket: this._bucketName,
+        Key: fileName,
+      })
+    );
   }
 }
 
